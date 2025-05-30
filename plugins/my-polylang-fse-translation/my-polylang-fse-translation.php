@@ -4,7 +4,6 @@ Plugin Name: My Polylang FSE Translation
 Description: Automates string registration for Polylang block content, including synced patterns with overrides.
 Version: 1.4
 Author: Aron & Grok
-Depends: polylang/polylang.php
 */
 
 // Hello ooo000yyy
