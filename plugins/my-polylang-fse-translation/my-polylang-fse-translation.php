@@ -7,7 +7,7 @@ Author: Aron & Grok
 Depends: polylang/polylang.php
 */
 
-// Hello ooo000yyy
+// Hello ooo00
 // Debug configuration
 define('DEBUG_LEVEL', 'ALL'); // Options: 'ERROR', 'WARNING', 'INFO', 'ALL'
 
