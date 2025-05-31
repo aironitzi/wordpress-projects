@@ -2,12 +2,12 @@
 /*
 Plugin Name: My Polylang FSE Translation
 Description: Automates string registration for Polylang block content, including synced patterns with overrides.
-Version: 1.4
+Version: 1.5
 Author: Aron & Grok
 Depends: polylang/polylang.php
 */
 
-// Debug configuration testgg
+// Debug configuration
 define('DEBUG_LEVEL', 'ALL'); // Options: 'ERROR', 'WARNING', 'INFO', 'ALL'
 
 // Prevent redundant initialization
