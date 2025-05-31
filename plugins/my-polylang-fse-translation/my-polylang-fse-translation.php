@@ -63,9 +63,10 @@ function initialize_polylang_check() {
         'hook' => current_action()
     ]);
 
-    pll_register_string('site_header_content', 'Site Header Content', 'Theme', true);
-    pll_register_string('site_footer_content', 'Site Footer Content', 'Theme', true);
-    log_debug('Registered Site Header and Footer Content groups with Polylang', 'INFO');
+    // Removed unnecessary registration of group names as strings
+    // pll_register_string('site_header_content', 'Site Header Content', 'Theme', true);
+    // pll_register_string('site_footer_content', 'Site Footer Content', 'Theme', true);
+    // log_debug('Registered Site Header and Footer Content groups with Polylang', 'INFO');
     return true;
 }
 
@@ -227,7 +228,6 @@ function register_block_strings($post_id, $post, $update, $context = 'block') {
         return;
     }
 
-    // Removed my-patterns category restriction for wp_block
     if ($is_template_part && !in_array($post->post_name, ['header', 'footer'])) {
         log_debug('Template part not header or footer', 'WARNING', ['post_id' => $post_id, 'post_name' => $post->post_name, 'context' => $context]);
         return;
@@ -267,6 +267,7 @@ function register_block_strings($post_id, $post, $update, $context = 'block') {
         log_debug('No cache found, extracted and cached strings', 'INFO', ['post_id' => $post_id, 'cache_key' => $cache_key, 'string_count' => count($strings), 'context' => $context]);
     }
 
+    // Moved unregistration inside the function to ensure proper sequence
     unregister_old_strings($post_id, $post, $context);
 
     $group = $is_block ? 'Pattern: ' . $post->post_title : ($is_template_part ? ($post->post_name === 'header' ? 'Site Header Content' : 'Site Footer Content') : 'Post: ' . $post->post_title);
@@ -330,11 +331,13 @@ add_action('wp_after_insert_post', function ($post_id, $post, $update) {
         register_block_strings($post_id, $post, $update, 'block');
     }
 }, 20, 3);
-add_action('wp_after_insert_post', function ($post_id, $post) {
-    if ($post->post_type === 'wp_block' || $post->post_type === 'wp_template_part') {
-        unregister_old_strings($post_id, $post, 'block');
-    }
-}, 19, 2);
+
+// Removed redundant unregistration hook
+// add_action('wp_after_insert_post', function ($post_id, $post) {
+//     if ($post->post_type === 'wp_block' || $post->post_type === 'wp_template_part') {
+//         unregister_old_strings($post_id, $post, 'block');
+//     }
+// }, 19, 2);
 
 // Hook for posts/pages with synced patterns
 add_action('wp_after_insert_post', function ($post_id, $post, $update) {
@@ -346,13 +349,15 @@ add_action('wp_after_insert_post', function ($post_id, $post, $update) {
         }
     }
 }, 20, 3);
-add_action('wp_after_insert_post', function ($post_id, $post) {
-    if (in_array($post->post_type, ['post', 'page'])) {
-        if (strpos($post->post_content, 'wp:block') !== false) {
-            unregister_old_strings($post_id, $post, 'pattern_instance');
-        }
-    }
-}, 19, 2);
+
+// Removed redundant unregistration hook
+// add_action('wp_after_insert_post', function ($post_id, $post) {
+//     if (in_array($post->post_type, ['post', 'page'])) {
+//         if (strpos($post->post_content, 'wp:block') !== false) {
+//             unregister_old_strings($post_id, $post, 'pattern_instance');
+//         }
+//     }
+// }, 19, 2);
 
 // Check for file-based template parts
 add_action('save_post_wp_template_part', function ($post_id, $post, $update) {
