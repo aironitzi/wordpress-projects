@@ -7,7 +7,7 @@ Author: Aron & Grok
 Depends: polylang/polylang.php
 */
 
-// Debug configuration
+// Debug configuration test
 define('DEBUG_LEVEL', 'ALL'); // Options: 'ERROR', 'WARNING', 'INFO', 'ALL'
 
 // Prevent redundant initialization
