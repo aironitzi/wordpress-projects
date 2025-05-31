@@ -358,22 +358,53 @@ add_action('wp_after_insert_post', function ($post_id, $post) {
     }
 }, 19, 2);
 
-// Check for file-based template parts
 add_action('save_post_wp_template_part', function ($post_id, $post, $update) {
     $child_theme = get_stylesheet_directory() . "/parts/{$post->post_name}.html";
     $parent_theme = get_template_directory() . "/parts/{$post->post_name}.html";
-    $template_part_file = file_exists($child_theme) ? $child_theme : (file_exists($parent_theme) ? $parent_theme : false);
+    $template_part_file = is_file($child_theme) ? $child_theme : (is_file($parent_theme) ? $parent_theme : false);
     
-    if ($template_part_file) {
-        log_debug('Found file-based template part', 'INFO', ['post_id' => $post_id, 'file' => $template_part_file]);
-        $content = file_get_contents($template_part_file);
-        $cache_key = 'block_strings_' . $post_id . '_template';
-        $strings = extract_translatable_strings($content, 'template');
-        if (empty($strings)) {
-            log_debug('No strings extracted from file-based template part', 'WARNING', ['content' => substr($content, 0, 100)]);
-        }
-        set_transient($cache_key, $strings, DAY_IN_SECONDS);
-        set_transient($cache_key . '_hash', md5($content), DAY_IN_SECONDS);
-        log_debug('Extracted strings from file-based template part', 'INFO', ['post_id' => $post_id, 'string_count' => count($strings)]);
+    if ($template_part_file === false) {
+        log_debug('No valid template part file found', 'WARNING', [
+            'post_id' => $post_id,
+            'child_theme_path' => $child_theme,
+            'parent_theme_path' => $parent_theme
+        ]);
+        return;
     }
+
+    if (!is_file($template_part_file)) {
+        log_debug('Template part path is not a file', 'ERROR', [
+            'post_id' => $post_id,
+            'file' => $template_part_file
+        ]);
+        return;
+    }
+
+    log_debug('Found file-based template part', 'INFO', [
+        'post_id' => $post_id,
+        'file' => $template_part_file
+    ]);
+    $content = file_get_contents($template_part_file);
+    if ($content === false) {
+        log_debug('Failed to read template part file', 'ERROR', [
+            'post_id' => $post_id,
+            'file' => $template_part_file
+        ]);
+        return;
+    }
+
+    $cache_key = 'block_strings_' . $post_id . '_template';
+    $strings = extract_translatable_strings($content, 'template');
+    if (empty($strings)) {
+        log_debug('No strings extracted from file-based template part', 'WARNING', [
+            'post_id' => $post_id,
+            'content' => substr($content, 0, 100)
+        ]);
+    }
+    set_transient($cache_key, $strings, DAY_IN_SECONDS);
+    set_transient($cache_key . '_hash', md5($content), DAY_IN_SECONDS);
+    log_debug('Extracted strings from file-based template part', 'INFO', [
+        'post_id' => $post_id,
+        'string_count' => count($strings)
+    ]);
 }, 10, 3);
