@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: My Polylang FSE Translation
-Description: Automates string registration for Polylang block content, including synced patterns with overrides.
+Description: Automates string registration for Polylang block content, including synced patterns, template parts, and reusable blocks.
 Version: 1.5
 Author: Aron & Grok
 Depends: polylang/polylang.php
@@ -63,8 +63,9 @@ function initialize_polylang_check() {
         'hook' => current_action()
     ]);
 
+    pll_register_string('site_header_content', 'Site Header Content', 'Theme', true);
     pll_register_string('site_footer_content', 'Site Footer Content', 'Theme', true);
-    log_debug('Registered Site Footer Content group with Polylang', 'INFO');
+    log_debug('Registered Site Header and Footer Content groups with Polylang', 'INFO');
     return true;
 }
 
@@ -87,6 +88,9 @@ function extract_translatable_strings($content, $context = 'block') {
     }
     
     foreach ($blocks as $block) {
+        // Log block details for debugging
+        log_debug('Processing block', 'INFO', ['block_type' => $block['blockName'], 'attrs' => $block['attrs'], 'context' => $context]);
+
         // Handle innerContent
         if (!empty($block['innerContent'])) {
             foreach ($block['innerContent'] as $inner_content) {
@@ -99,18 +103,15 @@ function extract_translatable_strings($content, $context = 'block') {
                 }
             }
         }
-        // Handle text and content attributes
-        if (!empty($block['attrs']['text'])) {
-            $cleaned = trim(strip_tags($block['attrs']['text']));
-            if ($cleaned) {
-                $strings[] = $cleaned;
-                log_debug('Extracted string from text attribute', 'INFO', ['string' => $cleaned, 'context' => $context]);
-            }
-        } elseif (!empty($block['attrs']['content'])) {
-            $cleaned = trim(strip_tags($block['attrs']['content']));
-            if ($cleaned) {
-                $strings[] = $cleaned;
-                log_debug('Extracted string from content attribute', 'INFO', ['string' => $cleaned, 'context' => $context]);
+        // Handle common text attributes
+        $text_attributes = ['text', 'content', 'title', 'description'];
+        foreach ($text_attributes as $attr) {
+            if (!empty($block['attrs'][$attr])) {
+                $cleaned = trim(strip_tags($block['attrs'][$attr]));
+                if ($cleaned) {
+                    $strings[] = $cleaned;
+                    log_debug("Extracted string from $attr attribute", 'INFO', ['string' => $cleaned, 'context' => $context]);
+                }
             }
         }
         // Handle overrides in synced patterns
@@ -137,7 +138,7 @@ function extract_translatable_strings($content, $context = 'block') {
     if (empty($strings)) {
         log_debug('No translatable strings found', 'WARNING', ['context' => $context]);
     } else {
-        log_debug('Extracted translatable strings', 'INFO', ['string_count' => count($strings), 'context' => $context]);
+        log_debug('Extracted translatable strings', 'INFO', ['string_count' => count($strings), 'strings' => $strings, 'context' => $context]);
     }
     return $strings;
 }
@@ -226,11 +227,7 @@ function register_block_strings($post_id, $post, $update, $context = 'block') {
         return;
     }
 
-    if ($is_block && !has_term('my-patterns', 'category', $post_id)) {
-        log_debug('Post not in my-patterns category', 'WARNING', ['post_id' => $post_id, 'context' => $context]);
-        return;
-    }
-
+    // Removed my-patterns category restriction for wp_block
     if ($is_template_part && !in_array($post->post_name, ['header', 'footer'])) {
         log_debug('Template part not header or footer', 'WARNING', ['post_id' => $post_id, 'post_name' => $post->post_name, 'context' => $context]);
         return;
@@ -357,53 +354,47 @@ add_action('wp_after_insert_post', function ($post_id, $post) {
     }
 }, 19, 2);
 
+// Check for file-based template parts
 add_action('save_post_wp_template_part', function ($post_id, $post, $update) {
     $child_theme = get_stylesheet_directory() . "/parts/{$post->post_name}.html";
     $parent_theme = get_template_directory() . "/parts/{$post->post_name}.html";
-    $template_part_file = is_file($child_theme) ? $child_theme : (is_file($parent_theme) ? $parent_theme : false);
+    $template_part_file = file_exists($child_theme) ? $child_theme : (file_exists($parent_theme) ? $parent_theme : false);
     
-    if ($template_part_file === false) {
-        log_debug('No valid template part file found', 'WARNING', [
-            'post_id' => $post_id,
-            'child_theme_path' => $child_theme,
-            'parent_theme_path' => $parent_theme
-        ]);
-        return;
+    if ($template_part_file) {
+        log_debug('Found file-based template part', 'INFO', ['post_id' => $post_id, 'file' => $template_part_file]);
+        $content = file_get_contents($template_part_file);
+        if ($content === false) {
+            log_debug('Failed to read file-based template part', 'ERROR', ['post_id' => $post_id, 'file' => $template_part_file]);
+            return;
+        }
+        $cache_key = 'block_strings_' . $post_id . '_template';
+        $current_content_hash = md5($content);
+        $prev_content_hash = get_transient($cache_key . '_hash');
+        
+        if ($prev_content_hash !== $current_content_hash) {
+            $strings = extract_translatable_strings($content, 'template');
+            if (empty($strings)) {
+                log_debug('No strings extracted from file-based template part', 'WARNING', ['content' => substr($content, 0, 100)]);
+            } else {
+                set_transient($cache_key, $strings, DAY_IN_SECONDS);
+                set_transient($cache_key . '_hash', $current_content_hash, DAY_IN_SECONDS);
+                log_debug('Extracted and cached strings from file-based template part', 'INFO', ['post_id' => $post_id, 'string_count' => count($strings)]);
+                
+                $group = ($post->post_name === 'header' ? 'Site Header Content' : 'Site Footer Content');
+                foreach ($strings as $string) {
+                    $string_name = 'template_part_' . $post_id . '_' . md5($string);
+                    try {
+                        pll_register_string($string_name, $string, $group, true);
+                        log_debug('Registered file-based template part string', 'INFO', ['string_name' => $string_name, 'string' => $string, 'group' => $group]);
+                    } catch (Exception $e) {
+                        log_debug('Failed to register file-based template part string', 'ERROR', ['string_name' => $string_name, 'error' => $e->getMessage()]);
+                    }
+                }
+            }
+        } else {
+            log_debug('Using cached strings for file-based template part', 'INFO', ['post_id' => $post_id, 'cache_key' => $cache_key]);
+        }
+    } else {
+        log_debug('No file-based template part found', 'INFO', ['post_id' => $post_id, 'post_name' => $post->post_name]);
     }
-
-    if (!is_file($template_part_file)) {
-        log_debug('Template part path is not a file', 'ERROR', [
-            'post_id' => $post_id,
-            'file' => $template_part_file
-        ]);
-        return;
-    }
-
-    log_debug('Found file-based template part', 'INFO', [
-        'post_id' => $post_id,
-        'file' => $template_part_file
-    ]);
-    $content = file_get_contents($template_part_file);
-    if ($content === false) {
-        log_debug('Failed to read template part file', 'ERROR', [
-            'post_id' => $post_id,
-            'file' => $template_part_file
-        ]);
-        return;
-    }
-
-    $cache_key = 'block_strings_' . $post_id . '_template';
-    $strings = extract_translatable_strings($content, 'template');
-    if (empty($strings)) {
-        log_debug('No strings extracted from file-based template part', 'WARNING', [
-            'post_id' => $post_id,
-            'content' => substr($content, 0, 100)
-        ]);
-    }
-    set_transient($cache_key, $strings, DAY_IN_SECONDS);
-    set_transient($cache_key . '_hash', md5($content), DAY_IN_SECONDS);
-    log_debug('Extracted strings from file-based template part', 'INFO', [
-        'post_id' => $post_id,
-        'string_count' => count($strings)
-    ]);
 }, 10, 3);
